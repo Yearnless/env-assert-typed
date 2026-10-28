@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { envAssert } from './index';
+import { envAssert, EnvAssertError } from './index.js';
 
 describe('envAssert', () => {
   it('parses and coerces valid strings, numbers, and booleans', () => {
@@ -50,6 +50,15 @@ describe('envAssert', () => {
     expect(env.HOST).toBe('fallback');
   });
 
+  it('treats whitespace-only values as unset', () => {
+    const env = envAssert(
+      { PORT: { type: 'number', default: 8080 }, FLAG: { type: 'boolean', default: false } },
+      { PORT: '   ', FLAG: '\t' }
+    );
+    expect(env.PORT).toBe(8080);
+    expect(env.FLAG).toBe(false);
+  });
+
   it('leaves optional variables undefined when unset and not defaulted', () => {
     const env = envAssert({ OPTIONAL: { type: 'string' } }, {});
     expect(env.OPTIONAL).toBeUndefined();
@@ -70,7 +79,13 @@ describe('envAssert', () => {
     ).toThrow(/Value for \[NODE_ENV\] \("staging"\) is not one of allowable choices/);
   });
 
-  it('throws a combined error listing every failure', () => {
+  it('rejects default: undefined as a schema error', () => {
+    expect(() => envAssert({ X: { type: 'string', default: undefined } }, {})).toThrow(
+      /Invalid schema for \[X\]/
+    );
+  });
+
+  it('throws EnvAssertError with every failure enumerable', () => {
     const bad = () =>
       envAssert(
         {
@@ -80,8 +95,18 @@ describe('envAssert', () => {
         { RETRIES: 'not_a_number' }
       );
 
-    expect(bad).toThrow(/Missing required environment variable: \[SECRET_KEY\]/);
-    expect(bad).toThrow(/Invalid number for environment variable \[RETRIES\]/);
+    expect(bad).toThrow(EnvAssertError);
+    try {
+      bad();
+    } catch (err) {
+      if (!(err instanceof EnvAssertError)) throw new TypeError('expected EnvAssertError');
+      expect(err.name).toBe('EnvAssertError');
+      expect(err.errors).toEqual([
+        'Missing required environment variable: [SECRET_KEY]',
+        'Invalid number for environment variable [RETRIES]: received "not_a_number"',
+      ]);
+      expect(err.message).toContain('Configuration failed');
+    }
   });
 
   it('rejects non-finite numbers', () => {

@@ -31,3 +31,13 @@ const hostAsUndefined: undefined = env.HOST;
 void portAsString;
 void debugAsBoolean;
 void hostAsUndefined;
+void port;
+void host;
+void debug;
+void region;
+
+// Schema literals are checked per field: default and choices must match `type`.
+// @ts-expect-error string default is rejected on a number field
+envAssert({ X: { type: 'number', default: 'five' } }, {});
+// @ts-expect-error string choices are rejected on a number field
+envAssert({ Y: { type: 'number', choices: ['us', 'eu'] } }, {});
